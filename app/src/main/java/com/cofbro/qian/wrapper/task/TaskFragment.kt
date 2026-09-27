@@ -17,7 +17,8 @@ import com.cofbro.qian.mapsetting.MapActivity
 import com.cofbro.qian.photo.PhotoSignActivity
 import com.cofbro.qian.scan.ScanActivity
 import com.cofbro.qian.utils.AccountManager
-import com.cofbro.qian.utils.AmapUtils
+import com.cofbro.qian.utils.BaiduLocationUtils
+import com.cofbro.qian.utils.BaiduSdk
 import com.cofbro.qian.utils.CacheUtils
 import com.cofbro.qian.utils.Constants
 import com.cofbro.qian.utils.HtmlParser
@@ -331,7 +332,7 @@ class TaskFragment : BaseFragment<TaskViewModel, FragmentTaskBinding>() {
         intent.putExtra("classId", activity?.classId)
         intent.putExtra("cpi", activity?.cpi)
 
-        startActivity(intent)
+        BaiduSdk.ensureConsent(requireActivity()) { startActivity(intent) }
     }
 
     private fun toScanActivity() {
@@ -342,21 +343,27 @@ class TaskFragment : BaseFragment<TaskViewModel, FragmentTaskBinding>() {
 
     private fun signWithCamera(id: String?) {
         if (id.isNullOrEmpty()) return
-        lifecycleScope.launch(Dispatchers.IO) {
-            viewModel.preSign(preSignUrl)
-            locate {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val address =
-                        "{\"result\":1,\"latitude\":$latitude,\"longitude\":$longitude,\"address\":\"$locationText\"}"
-                    location = URLEncoder.encode(address, "UTF-8")
-                    viewModel.sign(URL.getSignWithCameraPath(id, location))
+        BaiduSdk.ensureConsent(requireActivity()) {
+            if (!BaiduLocationUtils.checkLocationPermission(requireActivity())) {
+                ToastUtils.show("请允许定位权限后重试")
+                return@ensureConsent
+            }
+            lifecycleScope.launch(Dispatchers.IO) {
+                viewModel.preSign(preSignUrl)
+                locate {
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val address =
+                            "{\"result\":1,\"latitude\":$latitude,\"longitude\":$longitude,\"address\":\"$locationText\"}"
+                        location = URLEncoder.encode(address, "UTF-8")
+                        viewModel.sign(URL.getSignWithCameraPath(id, location))
+                    }
                 }
             }
         }
     }
 
     private fun locate(onLocated: () -> Unit) {
-        AmapUtils.getCurrentLocationLatLng(requireContext(),
+        BaiduLocationUtils.getCurrentLocationLatLng(requireContext(),
             onSuccess = { lat, lon, location ->
                 latitude = lat
                 longitude = lon

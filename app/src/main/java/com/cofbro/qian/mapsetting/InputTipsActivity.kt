@@ -6,14 +6,16 @@ import android.view.View
 import androidx.appcompat.widget.SearchView
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.amap.api.services.help.Inputtips
-import com.amap.api.services.help.Inputtips.InputtipsListener
-import com.amap.api.services.help.InputtipsQuery
-import com.amap.api.services.help.Tip
+import com.baidu.mapapi.search.core.SearchResult
+import com.baidu.mapapi.search.sug.OnGetSuggestionResultListener
+import com.baidu.mapapi.search.sug.SuggestionResult
+import com.baidu.mapapi.search.sug.SuggestionSearch
+import com.baidu.mapapi.search.sug.SuggestionSearchOption
 import com.cofbro.hymvvmutils.base.BaseActivity
 import com.cofbro.qian.R
 import com.cofbro.qian.databinding.ActivityInputTipsBinding
 import com.cofbro.qian.mapsetting.adapter.InputTipsAdapter
+import com.cofbro.qian.mapsetting.model.PlaceSuggestion
 import com.cofbro.qian.mapsetting.util.Constants
 import com.cofbro.qian.mapsetting.util.ToastUtil
 import com.cofbro.qian.mapsetting.viewmodel.InputTipViewModel
@@ -21,11 +23,13 @@ import com.cofbro.qian.utils.TipUtils
 
 
 class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBinding>(), SearchView.OnQueryTextListener,
-    InputtipsListener, View.OnClickListener {
+    OnGetSuggestionResultListener, View.OnClickListener {
     var aid:String? = null
+    private var suggestionSearch: SuggestionSearch? = null
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-
-
+        suggestionSearch = SuggestionSearch.newInstance().also {
+            it.setOnGetSuggestionResultListener(this)
+        }
         initArgs()
         initSearchView()
         initViewClick()
@@ -57,14 +61,20 @@ class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBindin
      * @param tipList
      * @param rCode
      */
-    override fun onGetInputtips(tipList: MutableList<Tip>, rCode: Int) {
-
-        if (rCode == 1000) { // 正确返回
-            viewModel.mCurrentTipList = tipList
-            val listString: MutableList<String> = ArrayList()
-            for (i in tipList.indices) {
-                listString.add(tipList[i].name)
-            }
+    override fun onGetSuggestionResult(result: SuggestionResult) {
+        if (result.error == SearchResult.ERRORNO.NO_ERROR) {
+            viewModel.mCurrentTipList = result.allSuggestions.orEmpty().map { tip ->
+                PlaceSuggestion(
+                    name = tip.key.orEmpty(),
+                    address = tip.address.orEmpty().ifBlank {
+                        listOf(tip.city, tip.district).filterNotNull().joinToString(" ")
+                    },
+                    poiId = tip.uid.orEmpty(),
+                    latitude = tip.pt?.latitude,
+                    longitude = tip.pt?.longitude,
+                    city = tip.city.orEmpty()
+                )
+            }.toMutableList()
             viewModel.mIntipAdapter = InputTipsAdapter(
                 this, currentTip = viewModel.mCurrentTipList!!
             )
@@ -78,7 +88,7 @@ class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBindin
                      *  实现跳转
                      */
                     val intent = Intent(this, MapActivity::class.java)
-                    if(it.point!=null){
+                    if(it.latitude != null && it.longitude != null){
                         intent.putExtra(Constants.EXTRA_TIP, TipUtils.TipParseToArray(it))
                         intent.putExtra("aid",aid)
                         /**
@@ -86,12 +96,18 @@ class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBindin
                          */
                         setResult(100,intent)
                         finish()
+                    } else {
+                        intent.putExtra(Constants.KEY_WORDS_NAME, it.name)
+                        setResult(MapActivity.RESULT_CODE_KEYWORDS, intent)
+                        finish()
                     }
 
                 }
             }
         } else {
-            ToastUtil.showerror(this, rCode)
+            viewModel.mCurrentTipList?.clear()
+            viewModel.mIntipAdapter?.notifyDataSetChanged()
+            ToastUtil.show(this, "地点提示失败：${result.error}")
         }
     }
     /**
@@ -116,10 +132,12 @@ class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBindin
      */
     override fun onQueryTextChange(newText: String?): Boolean {
         if (!IsEmptyOrNullString(newText)) {
-            val inputquery = InputtipsQuery(newText, Constants.DEFAULT_CITY)
-            val inputTips = Inputtips(this@InputTipsActivity.applicationContext, inputquery)
-            inputTips.setInputtipsListener(this)
-            inputTips.requestInputtipsAsyn()
+            suggestionSearch?.requestSuggestion(
+                SuggestionSearchOption()
+                    .city(Constants.DEFAULT_CITY)
+                    .citylimit(false)
+                    .keyword(newText)
+            )
         } else {
             if (viewModel.mIntipAdapter != null && viewModel.mCurrentTipList != null) {
                 viewModel.mCurrentTipList!!.clear()
@@ -133,6 +151,12 @@ class InputTipsActivity : BaseActivity<InputTipViewModel,ActivityInputTipsBindin
         if (view.id == R.id.back) {
             finish()
         }
+    }
+
+    override fun onDestroy() {
+        suggestionSearch?.destroy()
+        suggestionSearch = null
+        super.onDestroy()
     }
 
     companion object {

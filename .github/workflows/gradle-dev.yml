@@ -2,8 +2,9 @@ name: Develop CI
 
 on:
   push:
-    branches-ignore: [ main ]
+    branches: [ main, feat/baidu-map-sdk ]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -20,13 +21,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build debug apk with Gradle
+      - name: Build APK with Gradle
         uses: gradle/gradle-command-action@v2
         with:
-          arguments: assembleDebug
+          arguments: assembleRelease assembleDebug
 
-      - name: Upload debug apk to artifacts
+      - name: Upload apk to artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: app-debug
-          path: ${{github.workspace}}/app/build/outputs/apk/debug/*.apk
+          name: xingji-apks
+          path: ${{github.workspace}}/app/build/outputs/apk/*/*.apk

@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     tools:context=".mapsetting.MapActivity">
 
-    <com.amap.api.maps2d.MapView
+    <com.baidu.mapapi.map.MapView
         android:id="@+id/maps"
         android:layout_width="match_parent"
         android:layout_height="match_parent"

@@ -7,20 +7,19 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
-import com.amap.api.services.help.Tip
-
 import com.cofbro.qian.R
 import com.cofbro.qian.databinding.ItemInputtipsListBinding
 import com.cofbro.qian.databinding.ItemTaskListBinding
+import com.cofbro.qian.mapsetting.model.PlaceSuggestion
 import kotlinx.coroutines.flow.combine
 
 /**
  * 输入提示adapter，展示item名称和地址
  */
-class InputTipsAdapter(val context: Context,val currentTip:MutableList<Tip>): RecyclerView.Adapter<InputTipsAdapter.InputViewHolder>()  {
-    private var itemClick: ((itemTip:Tip) -> Unit?)? = null
+class InputTipsAdapter(val context: Context,val currentTip:MutableList<PlaceSuggestion>): RecyclerView.Adapter<InputTipsAdapter.InputViewHolder>()  {
+    private var itemClick: ((itemTip:PlaceSuggestion) -> Unit?)? = null
     class InputViewHolder(private val binding: ItemInputtipsListBinding): RecyclerView.ViewHolder(binding.root){
-        fun bind(position: Int, currentTip:MutableList<Tip>,itemClick: ((itemTip:Tip) -> Unit?)? ){
+        fun bind(position: Int, currentTip:MutableList<PlaceSuggestion>,itemClick: ((itemTip:PlaceSuggestion) -> Unit?)? ){
             binding.name.text = currentTip[position].name
             binding.adress.text = currentTip[position].address
             binding.adapterS.setOnClickListener {
@@ -50,7 +49,7 @@ class InputTipsAdapter(val context: Context,val currentTip:MutableList<Tip>): Re
     override fun getItemCount(): Int {
         return currentTip.size
     }
-    fun setItemClickListener(itemClickListener: (itemTip:Tip) -> Unit){
+    fun setItemClickListener(itemClickListener: (itemTip:PlaceSuggestion) -> Unit){
         itemClick = itemClickListener
     }
 

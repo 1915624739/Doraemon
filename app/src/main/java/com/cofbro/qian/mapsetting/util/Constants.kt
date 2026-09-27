@@ -1,10 +1,10 @@
 package com.cofbro.qian.mapsetting.util
 
-import com.amap.api.maps2d.model.LatLng
+import com.baidu.mapapi.model.LatLng
 
 
 object Constants {
-    var DEFAULT_CITY = "北京"
+    var DEFAULT_CITY = "全国"
     const val EXTRA_TIP = "ExtraTip"
     const val KEY_WORDS_NAME = "KeyWord"
     const val EXTRA_MSG = "EXTRA_MSG"

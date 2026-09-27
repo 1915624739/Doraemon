@@ -9,12 +9,14 @@ import cn.leancloud.LeanCloud
 import com.cofbro.hymvvmutils.lean.LeanCloudUtils
 import com.cofbro.qian.update.InstallCompleteReceiver
 import com.cofbro.qian.utils.CacheUtils
+import com.cofbro.qian.utils.BaiduSdk
 import com.cofbro.qian.utils.Constants
 import com.hjq.toast.ToastUtils
 
 class App : Application(), Application.ActivityLifecycleCallbacks {
     override fun onCreate() {
         super.onCreate()
+        BaiduSdk.initializeIfAllowed(this)
         ToastUtils.init(this)
         LeanCloudUtils.init(true)
         CacheUtils.cache[Constants.DataLoad.FIRST_LOAD] = Constants.DataLoad.UNLOAD

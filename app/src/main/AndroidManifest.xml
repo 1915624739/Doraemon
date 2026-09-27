@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <!-- 允许程序打开网络套接字 -->
-    <uses-feature
-        android:name="android.hardware.camera"
-        android:required="false" />
 
-    <uses-permission android:name="android.permission.INTERNET" /> <!-- 允许程序设置内置sd卡的写权限 -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /> <!-- 允许程序获取网络状态 -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> <!-- 允许程序访问WiFi网络信息 -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" /> <!-- 允许程序读写手机状态和身份 -->
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" /> <!-- 允许程序访问CellID或WiFi热点来获取粗略的位置 -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
@@ -38,10 +37,12 @@
         android:usesCleartextTraffic="true"
         tools:replace="android:icon,android:theme,android:roundIcon"
         tools:targetApi="31">
-        <meta-data
-            android:name="com.amap.api.v2.apikey"
-            android:value="797648bd1ff4e06dd433af6e4f3b87fc" />
 
+        <meta-data
+            android:name="com.baidu.lbsapi.API_KEY"
+            android:value="${BAIDU_MAP_AK}" />
+
+        <service android:name="com.baidu.location.f" android:enabled="true" android:process=":remote" />
         <service android:name="cn.leancloud.push.PushService" />
         <receiver
             android:name="cn.leancloud.push.LCBroadcastReceiver"
@@ -53,27 +54,15 @@
             </intent-filter>
         </receiver>
 
-        <activity
-            android:name=".login.LoginActivity"
-            android:exported="true">
+        <activity android:name=".login.LoginActivity" android:exported="true">
             <intent-filter>
                 <category android:name="android.intent.category.LAUNCHER" />
-
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
-
-        <activity
-            android:name=".main.MainActivity"
-            android:exported="true">
-<!--                        <intent-filter>-->
-<!--                            <category android:name="android.intent.category.LAUNCHER" />-->
-
-<!--                            <action android:name="android.intent.action.MAIN" />-->
-<!--                        </intent-filter>-->
-        </activity>
-        <activity android:name=".profile.update.UpdateDetailActivity"/>
-        <activity android:name=".friend.login.IMLoginActivity"/>
+        <activity android:name=".main.MainActivity" android:exported="true" />
+        <activity android:name=".profile.update.UpdateDetailActivity" />
+        <activity android:name=".friend.login.IMLoginActivity" />
         <activity android:name=".wrapper.did.DoHomeworkActivity" />
         <activity android:name=".scan.ScanActivity" />
         <activity android:name=".account.manager.AccountManagerActivity" />
@@ -85,11 +74,11 @@
         <activity android:name=".record.SignRecordActivity" />
         <activity android:name=".login.sms.SMSActivity" />
         <activity android:name=".friend.chat.ChatActivity" />
-        <activity android:name=".friend.search.SearchFriendActivity"/>
-        <service android:name="com.amap.api.location.APSService" />
+        <activity android:name=".friend.search.SearchFriendActivity" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.cofbro.qian.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
@@ -97,5 +86,4 @@
                 android:resource="@xml/file_path" />
         </provider>
     </application>
-
 </manifest>

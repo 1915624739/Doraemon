@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">哆啦A梦</string>
+    <string name="app_name">行迹</string>
+    <string name="app_description">行迹 - 学习通智能签到与任务助手</string>
 
     <string name="course_list_course_id">课程ID：</string>
     <string name="course_list_class_id">班级ID：</string>
@@ -52,7 +53,7 @@
     <string name="update_detail_version_tip_latest">已是最新版本</string>
     <string name="update_detail_version_tip_not_latest">请更新至最新版本</string>
     <string name="update_detail_version_detail_info">版本详情 ></string>
-    <string name="update_detail_version_title">Doraemon App</string>
+    <string name="update_detail_version_title">行迹</string>
     <string name="update_detail_version_subtitle">学习通智能签到助手 | Android</string>
     <string name="update_detail_version_update_button_title">点击更新至新版本</string>
     <string name="update_detail_version_number">DAMX_%1$s | DEVELOP</string>

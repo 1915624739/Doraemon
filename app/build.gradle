@@ -6,17 +6,23 @@ plugins {
 android {
     namespace 'com.cofbro.qian'
     compileSdk 33
+    packaging {
+        jniLibs {
+            pickFirsts += ['**/libc++_shared.so']
+        }
+    }
     buildFeatures {
         viewBinding true
     }
     defaultConfig {
-        applicationId "com.cofbro.qian"
+        applicationId "com.xingji.coursehelper"
+        manifestPlaceholders = [BAIDU_MAP_AK: (project.findProperty('BAIDU_MAP_AK') ?: System.getenv('BAIDU_MAP_AK') ?: 'xstqYUzJ7ogFAjKebtAkuQWexVszfjgF')]
         minSdk 24
         targetSdk 33
         versionCode 1
         versionName "${releaseTime()}"
         ndk {
-            abiFilters 'arm64-v8a'
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
         }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -24,17 +30,27 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
-            def newName = "app-${releaseTime()}.apk"
+            def newName = "xingji-${variant.buildType.name}-${releaseTime()}.apk"
             outputFileName = newName
         }
     }
 
     signingConfigs {
         release {
-            storeFile rootProject.file("signingkey.jks")
-            storePassword System.getenv("KEY_STORE_PASSWORD")
-            keyAlias System.getenv("ALIAS")
-            keyPassword System.getenv("KEY_PASSWORD")
+            storeFile file("key/xingji.jks")
+            storePassword "PBKOTlsphqukclo081gvuXCgYpvKHHkEybVTMjSZCg0"
+            keyAlias "xingji"
+            keyPassword "PBKOTlsphqukclo081gvuXCgYpvKHHkEybVTMjSZCg0"
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
+        debug {
+            storeFile file("key/xingji.jks")
+            storePassword "PBKOTlsphqukclo081gvuXCgYpvKHHkEybVTMjSZCg0"
+            keyAlias "xingji"
+            keyPassword "PBKOTlsphqukclo081gvuXCgYpvKHHkEybVTMjSZCg0"
+            v1SigningEnabled true
+            v2SigningEnabled true
         }
     }
 
@@ -80,7 +96,10 @@ android {
 }
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+    implementation fileTree(dir: 'libs', include: ['*.jar'], exclude: ['AMap*.jar'])
+    implementation 'com.baidu.lbsyun:BaiduMapSDK_Map:8.2.0'
+    implementation 'com.baidu.lbsyun:BaiduMapSDK_Search:8.2.0'
+    implementation 'com.baidu.lbsyun:BaiduMapSDK_Location:9.6.9'
     implementation 'androidx.core:core-ktx:1.9.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.8.0'
@@ -110,6 +129,7 @@ dependencies {
     // OpenCV基础库
     implementation 'com.github.jenly1314.WeChatQRCode:opencv:2.0.1'
     implementation 'com.github.jenly1314.WeChatQRCode:opencv-armv64:2.0.1'
+    implementation 'com.github.jenly1314.WeChatQRCode:opencv-armv7a:2.0.1'
     // 微信二维码识别功能
     implementation 'com.github.jenly1314.WeChatQRCode:wechat-qrcode:2.0.1'
     // okhttp

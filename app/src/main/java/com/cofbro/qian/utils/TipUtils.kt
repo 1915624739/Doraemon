@@ -1,6 +1,6 @@
 package com.cofbro.qian.utils
 
-import com.amap.api.services.help.Tip
+import com.cofbro.qian.mapsetting.model.PlaceSuggestion
 
 object TipUtils {
 
@@ -14,14 +14,14 @@ object TipUtils {
       "longitude"
     }
      */
-    fun TipParseToArray(tip:Tip):ArrayList<String>{
+    fun TipParseToArray(tip: PlaceSuggestion): ArrayList<String> {
         val tipArray:ArrayList<String> = ArrayList()
         tipArray.add(tip.name) //0
         tipArray.add(tip.address) //1
-        tipArray.add(tip.poiID) //2
-        tipArray.add(tip.point.latitude.toString())  //3
-        tipArray.add(tip.point.longitude.toString())  //4
-        tipArray.add(tip.district) //5
+        tipArray.add(tip.poiId) //2
+        tipArray.add(tip.latitude?.toString() ?: "") //3
+        tipArray.add(tip.longitude?.toString() ?: "") //4
+        tipArray.add(tip.city) //5
         return  tipArray
     }
 }

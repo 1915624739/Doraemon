@@ -1,5 +1,7 @@
 pluginManagement {
     repositories {
+        def localMirror = System.getenv('DORAEMON_LOCAL_MAVEN')
+        if (localMirror) maven { url uri(localMirror) }
         google()
         mavenCentral()
         maven { url 'https://jitpack.io' }
@@ -9,6 +11,8 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        def localMirror = System.getenv('DORAEMON_LOCAL_MAVEN')
+        if (localMirror) maven { url uri(localMirror) }
         google()
         mavenCentral()
         jcenter()

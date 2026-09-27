@@ -3,24 +3,33 @@ package com.cofbro.qian.mapsetting
 
 import android.app.Dialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
-import android.os.PersistableBundle
 import android.view.View
 import android.widget.ImageView
-import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
 import com.alibaba.fastjson.JSONArray
 import com.alibaba.fastjson.JSONObject
-import com.amap.api.maps2d.AMap
-import com.amap.api.maps2d.CameraUpdateFactory
-import com.amap.api.maps2d.model.BitmapDescriptorFactory
-import com.amap.api.maps2d.model.LatLng
-import com.amap.api.maps2d.model.Marker
-import com.amap.api.maps2d.model.MarkerOptions
-import com.amap.api.services.core.PoiItemV2
-import com.amap.api.services.core.SuggestionCity
-import com.amap.api.services.poisearch.PoiResultV2
-import com.amap.api.services.poisearch.PoiSearchV2
+import com.baidu.mapapi.map.BaiduMap
+import com.baidu.mapapi.map.BitmapDescriptorFactory
+import com.baidu.mapapi.map.MapPoi
+import com.baidu.mapapi.map.MapStatusUpdateFactory
+import com.baidu.mapapi.map.Marker
+import com.baidu.mapapi.map.MarkerOptions
+import com.baidu.mapapi.model.LatLng
+import com.baidu.mapapi.search.core.SearchResult
+import com.baidu.mapapi.search.geocode.GeoCodeResult
+import com.baidu.mapapi.search.geocode.GeoCoder
+import com.baidu.mapapi.search.geocode.OnGetGeoCoderResultListener
+import com.baidu.mapapi.search.geocode.ReverseGeoCodeOption
+import com.baidu.mapapi.search.geocode.ReverseGeoCodeResult
+import com.baidu.mapapi.search.poi.OnGetPoiSearchResultListener
+import com.baidu.mapapi.search.poi.PoiCitySearchOption
+import com.baidu.mapapi.search.poi.PoiDetailResult
+import com.baidu.mapapi.search.poi.PoiDetailSearchResult
+import com.baidu.mapapi.search.poi.PoiIndoorResult
+import com.baidu.mapapi.search.poi.PoiResult
+import com.baidu.mapapi.search.poi.PoiSearch
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners
@@ -36,7 +45,7 @@ import com.cofbro.qian.mapsetting.util.Constants
 import com.cofbro.qian.mapsetting.util.ToastUtil
 import com.cofbro.qian.mapsetting.viewmodel.MapViewModel
 import com.cofbro.qian.utils.AccountManager
-import com.cofbro.qian.utils.AmapUtils
+import com.cofbro.qian.utils.BaiduLocationUtils
 import com.cofbro.qian.utils.CacheUtils
 import com.cofbro.qian.utils.SignRecorder
 import com.cofbro.qian.utils.dp2px
@@ -48,14 +57,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.UnsupportedEncodingException
 import java.net.URLEncoder
-import java.util.regex.Matcher
-import java.util.regex.Pattern
-import com.cofbro.qian.utils.AmapUtils.BDLating
+import kotlin.math.abs
+import com.cofbro.qian.utils.BaiduLocationUtils.GeoPoint
 
-class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMarkerClickListener,
-    AMap.InfoWindowAdapter, PoiSearchV2.OnPoiSearchListener {
+class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), BaiduMap.OnMarkerClickListener,
+    OnGetPoiSearchResultListener, OnGetGeoCoderResultListener {
+    private var poiOverlay: Poi2DOverlay? = null
+    private var geoCoder: GeoCoder? = null
     private var alreadySign = false
     private var cookies = ""
     private var remark = ""
@@ -65,8 +74,9 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
     private var loadingDialog: Dialog? = null
     private var preSignOther = false
     override fun onActivityCreated(savedInstanceState: Bundle?) {
-        AmapUtils.checkLocationPermission(this)
-        AmapUtils.openLocation(this)
+        BaiduLocationUtils.checkLocationPermission(this)
+        BaiduLocationUtils.openLocation(this)
+        geoCoder = GeoCoder.newInstance().also { it.setOnGetGeoCodeResultListener(this) }
         getAvtarImage()
         initArgs()
         initObserver()
@@ -89,7 +99,7 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
             CacheUtils.cache["default_Sign_latitude"]?.toDouble()
                 ?.let {
                     CacheUtils.cache["default_Sign_longitude"]?.toDouble()
-                        ?.let { it1 -> BDLating(it, it1) }
+                        ?.let { it1 -> GeoPoint(it, it1) }
                 }
     }
     private fun initArgs() {
@@ -112,14 +122,10 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
     }
 
     override fun onDestroy() {
-        super.onDestroy()
-        // 在activity执行onDestroy时执行mMapView.onDestroy()，销毁地图
+        viewModel.poiSearch?.destroy()
+        geoCoder?.destroy()
         binding?.maps?.onDestroy()
-    }
-
-    override fun onSaveInstanceState(outState: Bundle, outPersistentState: PersistableBundle) {
-        super.onSaveInstanceState(outState, outPersistentState)
-        binding?.maps!!.onSaveInstanceState(outState)
+        super.onDestroy()
     }
 
     /**
@@ -127,8 +133,6 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
      */
     private fun setUpMap() {
         binding?.maps?.map?.setOnMarkerClickListener(this) // 添加点击marker监听事件
-        binding?.maps?.map?.setInfoWindowAdapter(this) // 添加显示infowindow监听事件
-        binding?.maps?.map?.uiSettings?.isScrollGesturesEnabled = (false)
 
     }
 
@@ -154,94 +158,72 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
      * 开始进行poi搜索
      */
     private fun doSearchQuery(keywords: String?) {
-        showProgressDialog() // 显示进度框
-        viewModel.currentPage = 1
-        // 第一个参数表示搜索字符串，第二个参数表示poi搜索类型，第三个参数表示poi搜索区域（空字符串代表全国）
-        viewModel.query = PoiSearchV2.Query(keywords, "", Constants.DEFAULT_CITY)
-        // 设置每页最多返回多少条poiitem
-        viewModel.query?.pageSize = 10
-        // 设置查第一页
-        viewModel.query?.pageNum = viewModel.currentPage
-        viewModel.poiSearch = PoiSearchV2(this, viewModel.query)
-        viewModel.poiSearch?.setOnPoiSearchListener(this)
-        viewModel.poiSearch?.searchPOIAsyn()
+        if (keywords.isNullOrBlank()) return
+        showProgressDialog()
+        val search = viewModel.poiSearch ?: PoiSearch.newInstance().also {
+            it.setOnGetPoiSearchResultListener(this)
+            viewModel.poiSearch = it
+        }
+        search.searchInCity(
+            PoiCitySearchOption().city(Constants.DEFAULT_CITY)
+                .cityLimit(false).keyword(keywords).pageNum(0).pageCapacity(10)
+        )
     }
 
     override fun onMarkerClick(marker: Marker): Boolean {
-        marker.showInfoWindow()
-        return false
+        val poi = poiOverlay?.getPoiItem(marker) ?: return false
+        val point = poi.location ?: return false
+        binding?.maps?.map?.clear()
+        poiOverlay = null
+        viewModel.currentTipPoint = point
+        viewModel.Tip_name = poi.name
+        viewModel.Tip_address = poi.address
+        viewModel.Tip_City = poi.city
+        binding?.mainKeywords?.text = poi.name
+        binding?.etLocationName?.setText(poi.name)
+        binding?.selectButton?.visibility = View.VISIBLE
+        binding?.etLocationName?.visibility = View.VISIBLE
+        addLatLngMarker(point)
+        return true
     }
 
-    override fun getInfoContents(marker: Marker?): View? {
-        return null
-    }
-
-    override fun getInfoWindow(marker: Marker): View {
-        val view: View = layoutInflater.inflate(
-            R.layout.poikeywordsearch_uri,
-            null
-        )
-        val title = view.findViewById<View>(R.id.title) as TextView
-        title.text = marker.title
-        val snippet = view.findViewById<View>(R.id.snippet) as TextView
-        snippet.text = marker.snippet
-        return view
-    }
-
-    /**
-     * poi没有搜索到数据，返回一些推荐城市的信息  Deprecated
-     */
-    @Deprecated("高德版本更新舍弃")
-    private fun showSuggestCity(cities: List<SuggestionCity>) {
-        var infomation = "推荐城市\n"
-        for (i in cities.indices) {
-            infomation += """
-                城市名称:${cities[i].cityName}城市区号:${cities[i].cityCode}城市编码:${cities[i].adCode}
-                
-                """.trimIndent()
+    override fun onGetPoiResult(result: PoiResult) {
+        dismissProgressDialog()
+        if (result.error != SearchResult.ERRORNO.NO_ERROR) {
+            ToastUtil.show(this, "地点搜索失败：${result.error}")
+            return
         }
-        ToastUtil.show(this@MapActivity, infomation)
-    }
-
-    /**
-     * POI信息查询回调方法
-     */
-    //(p0: PoiResultV2?, p1: Int)
-    override fun onPoiSearched(result: PoiResultV2?, rCode: Int) {
-        dismissProgressDialog() // 隐藏对话框
-        if (rCode == 1000) {
-            if (result != null && result.query != null) { // 搜索poi的结果
-                if (result.query == viewModel.query) { // 是否是同一条
-                    viewModel.poiResult = result
-                    // 取得搜索到的poiitems有多少页
-                    val poiItems: ArrayList<PoiItemV2>? =
-                        viewModel.poiResult!!.pois
-                    if (poiItems != null && poiItems.size > 0) {
-                        binding?.maps?.map?.clear() // 清理之前的图标
-                        val poi2DOverlay = Poi2DOverlay(binding?.maps?.map, poiItems)
-                        poi2DOverlay.removeFromMap()
-                        poi2DOverlay.addToMap()
-                        poi2DOverlay.zoomToSpan()
-                    } else {
-                        ToastUtil.show(
-                            this@MapActivity,
-                            "网络错误"
-                        )
-                    }
-                }
-            } else {
-                ToastUtil.show(
-                    this@MapActivity,
-                    "网络错误"
-                )
-            }
-        } else {
-            ToastUtil.showerror(this, rCode)
+        val pois = result.allPoi.orEmpty()
+        val map = binding?.maps?.map ?: return
+        if (pois.isEmpty()) {
+            ToastUtil.show(this, "没有找到地点")
+            return
+        }
+        map.clear()
+        poiOverlay = Poi2DOverlay(this, map, pois).also {
+            it.addToMap()
+            it.zoomToSpan()
         }
     }
 
-    override fun onPoiItemSearched(p0: PoiItemV2?, p1: Int) {
-        // TODO Auto-generated method stub
+    override fun onGetPoiDetailResult(result: PoiDetailResult) = Unit
+    override fun onGetPoiDetailResult(result: PoiDetailSearchResult) = Unit
+    override fun onGetPoiIndoorResult(result: PoiIndoorResult) = Unit
+    override fun onGetGeoCodeResult(result: GeoCodeResult) = Unit
+
+    override fun onGetReverseGeoCodeResult(result: ReverseGeoCodeResult) {
+        if (result.error != SearchResult.ERRORNO.NO_ERROR) return
+        val location = result.location ?: return
+        if (abs(location.latitude - viewModel.currentTipPoint.latitude) > 0.00001 ||
+            abs(location.longitude - viewModel.currentTipPoint.longitude) > 0.00001) return
+        val address = result.address.orEmpty()
+        if (address.isNotBlank()) {
+            viewModel.Tip_name = address
+            viewModel.Tip_address = address
+            viewModel.Tip_City = result.addressDetail?.city
+            binding?.etLocationName?.setText(address)
+            binding?.mainKeywords?.text = address
+        }
     }
 
     /**
@@ -257,26 +239,23 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
         val imageView: ImageView = view.findViewById(R.id.avatar_default)
         imageView.setImageDrawable(binding!!.search.drawable)
         val descriptor = BitmapDescriptorFactory.fromView(view)
-        viewModel.mPoiMarker = binding?.maps?.map?.addMarker(MarkerOptions().icon(descriptor))
-        if (tip[3] != "") {
-            val markerPosition = LatLng(tip[3].toDouble(), tip[4].toDouble())
-            viewModel.mPoiMarker!!.position = markerPosition
-            binding?.maps?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(markerPosition, 17F))
-        }
-        viewModel.mPoiMarker!!.title = tip[0]
-        viewModel.mPoiMarker!!.snippet = tip[1]
+        val markerPosition = LatLng(tip[3].toDouble(), tip[4].toDouble())
+        viewModel.mPoiMarker = binding?.maps?.map?.addOverlay(
+            MarkerOptions().position(markerPosition).icon(descriptor).title(tip[0])
+        ) as? Marker
+        binding?.maps?.map?.animateMapStatus(MapStatusUpdateFactory.newLatLngZoom(markerPosition, 17F))
     }
 
-    private fun addLatingDefaultMarker(LatLng: BDLating?) {
-        if (LatLng == null) {
+    private fun addLatingDefaultMarker(point: GeoPoint?) {
+        if (point == null) {
             return
         }
         val view = View.inflate(applicationContext, R.layout.item_sign_default_mark, null)
         val descriptor = BitmapDescriptorFactory.fromView(view)
-        viewModel.default_mark = binding?.maps?.map?.addMarker(MarkerOptions().icon(descriptor))
-        val point = LatLng
         val markerPosition = LatLng(point.latitude, point.longitude)
-        viewModel.default_mark!!.position = markerPosition
+        viewModel.default_mark = binding?.maps?.map?.addOverlay(
+            MarkerOptions().position(markerPosition).icon(descriptor)
+        ) as? Marker
     }
 
     private fun addLatLngMarker(latLng: LatLng?, default: Boolean = false) {
@@ -287,12 +266,13 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
         val imageView: ImageView = view.findViewById(R.id.avatar_default)
         imageView.setImageDrawable(binding!!.search.drawable)
         val descriptor = BitmapDescriptorFactory.fromView(view)
-        viewModel.mPoiMarker = binding?.maps?.map?.addMarker(MarkerOptions().icon(descriptor))
         val point = latLng
         val markerPosition = LatLng(point.latitude, point.longitude)
-        viewModel.mPoiMarker!!.position = markerPosition
+        viewModel.mPoiMarker = binding?.maps?.map?.addOverlay(
+            MarkerOptions().position(markerPosition).icon(descriptor)
+        ) as? Marker
         if (!default) {
-            binding?.maps?.map?.moveCamera(CameraUpdateFactory.newLatLngZoom(markerPosition, 17F))
+            binding?.maps?.map?.animateMapStatus(MapStatusUpdateFactory.newLatLngZoom(markerPosition, 17F))
         }
     }
 
@@ -324,82 +304,27 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
 
     private fun initViewClick() {
         binding?.selectButton?.setOnClickListener {
-            /**
-             * 绑定签到
-             */
             if (viewModel.statuscontent == "签到成功") {
                 ToastUtil.show(applicationContext, "您已经签到过了")
-                val intent = Intent(applicationContext, MainActivity::class.java)
-                startActivity(intent)
+                return@setOnClickListener
             }
-            if (viewModel.statuscontent != "签到成功" && viewModel.currentTipPoint.latitude.toInt() != 0 && viewModel.currentTipPoint.latitude.toInt() != 0) {
-                // 成功初始化mark并成功定位
-                if (viewModel.Tip_address != null && viewModel.Tip_name != null) {
-                    val cityName = viewModel.Tip_City
-                    val address = urlEncodeChinese(cityName + " " + viewModel.Tip_name)
-                    if (viewModel.currentTipPoint.latitude != 0.0 && viewModel.currentTipPoint.longitude != 0.0) {
-                        val Lating = AmapUtils.mapPointGdTurnBaiDu(
-                            viewModel.currentTipPoint.longitude,viewModel.currentTipPoint.latitude)
-                        viewModel.signUrl =
-                            URL.getLocationSignPath(
-                                address,
-                                viewModel.aid,
-                                viewModel.uid,
-                                Lating.latitude.toString(),
-                                Lating.longitude.toString()
-                            )
-                        sign(viewModel.signUrl)
-                        /**
-                         * 实现一起签到
-                         */
-
-                    } else {
-                        ToastUtils.show("请稍后")
-                    }
-                } else {
-                    /**
-                     * 没有任何输入，直接上传默认地址 首先判断是否签到成功 bug:presign无默认位置
-                     */
-                    if (viewModel.default_Sign_Location?.isNotEmpty() == true) {
-                        val defaultUrl = URL.getLocationSignPath(
-                            address = viewModel.default_Sign_Location,
-                            aid = viewModel.aid,
-                            uid = viewModel.uid,
-                            lat = viewModel.default_Sign_Lating?.latitude.toString(),
-                            long = viewModel.default_Sign_Lating?.longitude.toString()
-                        )
-                        viewModel.signUrl = defaultUrl
-                        sign(defaultUrl)
-
-                    } else {
-                        /**
-                         * 判断是否签到成功，或者本来就没有签到位置
-                         */
-
-                    }
-
-                }
-            } else {
-                //Toast.makeText(this, "没有定位", Toast.LENGTH_SHORT).show()
-                /**
-                 * 选择上传让老师看到的位置
-                 */
-                if (viewModel.currentTipPoint.latitude != 0.0 && viewModel.currentTipPoint.longitude != 0.0) {
-                    val Lating = AmapUtils.mapPointGdTurnBaiDu( viewModel.currentTipPoint.latitude,
-                        viewModel.currentTipPoint.longitude)
-                    viewModel.signUrl =
-                        URL.getLocationSignPath(
-                            address = binding?.etLocationName?.text.toString(),
-                            viewModel.aid,
-                            viewModel.uid,
-                            Lating.latitude.toString(),
-                            Lating.longitude.toString()
-                        )
-                    sign(viewModel.signUrl)
-                } else {
-
-                }
+            val point = viewModel.currentTipPoint
+            if (point.latitude !in -90.0..90.0 || point.longitude !in -180.0..180.0 ||
+                point.latitude == 0.0 || point.longitude == 0.0) {
+                ToastUtils.show("请先在地图上选择位置")
+                return@setOnClickListener
             }
+            val enteredAddress = binding?.etLocationName?.text?.toString()?.trim().orEmpty()
+            val address = enteredAddress.ifEmpty {
+                viewModel.Tip_name?.takeIf { it.isNotBlank() }
+                    ?: viewModel.default_Sign_Location?.takeIf { it.isNotBlank() }
+                    ?: "已选位置"
+            }
+            viewModel.signUrl = URL.getLocationSignPath(
+                urlEncodeChinese(address), viewModel.aid, viewModel.uid,
+                point.latitude.toString(), point.longitude.toString()
+            )
+            sign(viewModel.signUrl)
         }
         binding?.mainKeywords?.apply {
             setOnClickListener {
@@ -499,7 +424,9 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
         }
         viewModel.preSignLiveData.observe(this) {
             lifecycleScope.launch(Dispatchers.IO) {
-                it.data?.body?.string()?.let {
+                val html = it.data?.body?.string()
+                withContext(Dispatchers.Main) {
+                html?.let {
                     if (preSignOther) {
                         /**
                          * 代签无需进行操作
@@ -514,7 +441,8 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
                                         "老师未设置位置,请点击搜索"
                                     }
                                 }
-                                if (!preWeb.latitude.isNullOrEmpty()&& preWeb.latitude!="-1"&& !preWeb.longitude.isNullOrEmpty()&&preWeb.longitude!="-1") {
+                                if (preWeb.latitude?.toDoubleOrNull() != null && preWeb.latitude != "-1" &&
+                                    preWeb.longitude?.toDoubleOrNull() != null && preWeb.longitude != "-1") {
                                     viewModel.currentTipPoint =
                                         LatLng(
                                             preWeb.latitude.toDouble(),
@@ -525,13 +453,13 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
                                         LatLng(
                                             viewModel.currentTipPoint.latitude,
                                             viewModel.currentTipPoint.longitude
-                                        ), default = true
+                                        ), default = false
                                     )
                                     viewModel.default_Sign_Location = preWeb.locationText
                                     viewModel.default_Sign_Location = preWeb.locationText
                                     viewModel.statuscontent = preWeb.statusContent
                                     viewModel.default_Sign_Lating =
-                                        BDLating(
+                                        GeoPoint(
                                             preWeb.latitude.toDouble(),
                                             preWeb.longitude.toDouble()
                                         )
@@ -553,15 +481,16 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
                                     val lat = preWeb.html.getElementById("latitude")?.`val`() ?: ""
                                     val long =
                                         preWeb.html.getElementById("longitude")?.`val`() ?: ""
-                                    if (lat != "-1" && long !="-1") {
+                                    if (lat.toDoubleOrNull() != null && long.toDoubleOrNull() != null &&
+                                        lat != "-1" && long != "-1") {
                                         viewModel.currentTipPoint =
-                                            LatLng(lat.toDouble(), lat.toDouble())
+                                            LatLng(lat.toDouble(), long.toDouble())
                                         addLatLngMarker(
                                             LatLng(lat.toDouble(), long.toDouble()),
-                                            default = true
+                                            default = false
                                         )
                                         viewModel.default_Sign_Lating =
-                                            BDLating(lat.toDouble(), lat.toDouble())
+                                            GeoPoint(lat.toDouble(), long.toDouble())
                                         viewModel.default_Sign_Location = preWeb.locationText
                                         viewModel.statuscontent = preWeb.statusContent
                                         if (preWeb.locationText?.isEmpty() == true && preWeb.statusContent != "签到成功") {
@@ -582,6 +511,7 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
                             })
                         preSignOther = false
                     }
+                }
                 }
             }
         }
@@ -720,10 +650,14 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
     override fun onActivityResult(requestCode: Int, resultCode: Int, intent: Intent?) {
         super.onActivityResult(requestCode, resultCode, intent)
         when (requestCode) {
-            100 -> {
+            REQUEST_CODE -> {
+                    if (resultCode == RESULT_CODE_KEYWORDS) {
+                        doSearchQuery(intent?.getStringExtra(Constants.KEY_WORDS_NAME))
+                        return
+                    }
                     if (intent != null && intent.hasExtra(Constants.EXTRA_TIP)) {
                         val tip = intent.getStringArrayListExtra(Constants.EXTRA_TIP)
-                        if (tip != null) {
+                        if (tip != null && tip.size >= 6 && tip[3].toDoubleOrNull() != null && tip[4].toDoubleOrNull() != null) {
                             /**
                             获取完整Tip
                              */
@@ -747,50 +681,67 @@ class MapActivity : BaseActivity<MapViewModel, ActivityMapBinding>(), AMap.OnMar
                             viewModel.Tip_name = tip[0]
                             viewModel.Tip_address = tip[1]
                             viewModel.Tip_City = tip[5]
+                            binding?.etLocationName?.setText(tip[0])
                         }
                     }
             }
         }
     }
     private fun initMap(savedInstanceState: Bundle?) {
-        binding?.maps!!.onCreate(savedInstanceState)
-        if (binding?.maps?.map == null) {
-            setUpMap()
-        }
-        binding?.maps?.map?.setOnMapClickListener { latLng -> // 地图 点击 更换marker的经纬度
-            binding?.maps?.map?.clear()
-            addLatLngMarker(latLng, default = true)
-            viewModel.currentTipPoint = LatLng(latLng.latitude,latLng.longitude)
-            val latLngs = AmapUtils.mapPointBaiduTurnDG(viewModel.default_Sign_Lating!!.longitude,viewModel.default_Sign_Lating!!.latitude)
-//            Log.v("TAG",latLngs.toString())
+        binding?.maps?.onCreate(this, savedInstanceState)
+        setUpMap()
+        binding?.maps?.map?.setOnMapClickListener(object : BaiduMap.OnMapClickListener {
+            override fun onMapClick(point: LatLng) {
+                binding?.maps?.map?.clear()
+                poiOverlay = null
+                viewModel.currentTipPoint = point
+                viewModel.Tip_name = null
+                viewModel.Tip_address = null
+                viewModel.Tip_City = null
+                binding?.etLocationName?.setText("")
+                binding?.selectButton?.visibility = View.VISIBLE
+                binding?.etLocationName?.visibility = View.VISIBLE
+                addLatLngMarker(point, default = true)
+                addLatingDefaultMarker(viewModel.default_Sign_Lating)
+                geoCoder?.reverseGeoCode(ReverseGeoCodeOption().location(point))
+            }
 
-            addLatingDefaultMarker(latLngs)
-        }
-        AmapUtils.getCurrentLocationLatLng(applicationContext,
+            override fun onMapPoiClick(poi: MapPoi) {
+                onMapClick(poi.position)
+            }
+        })
+        loadCurrentLocation()
+    }
+
+    private fun loadCurrentLocation() {
+        BaiduLocationUtils.getCurrentLocationLatLng(applicationContext,
             onSuccess = { lat, lon, address ->
-                viewModel.default_My_Lating =
-                    BDLating(lat, lon)
-                val latLng= AmapUtils.mapPointGdTurnBaiDu(lat, lon)
-                addLatingDefaultMarker(viewModel.default_My_Lating)
+                viewModel.default_My_Lating = GeoPoint(lat, lon)
+                viewModel.default_My_Location = address
+                if (viewModel.currentTipPoint.latitude == 0.0) {
+                    binding?.maps?.map?.animateMapStatus(
+                        MapStatusUpdateFactory.newLatLngZoom(LatLng(lat, lon), 17F)
+                    )
+                }
             },
             onError = { error ->
-//                ToastUtils.show(error)
+                if (error != "缺少精确定位权限") ToastUtils.show(error)
             })
     }
 
-    private fun urlEncodeChinese(urlString: String): String {
-        var url = urlString
-        try {
-            val matcher: Matcher = Pattern.compile("[\\u4e00-\\u9fa5]").matcher(url)
-            var tmp = ""
-            while (matcher.find()) {
-                tmp = matcher.group()
-                url = url.replace(tmp.toRegex(), URLEncoder.encode(tmp, "UTF-8"))
-            }
-        } catch (e: UnsupportedEncodingException) {
-            e.printStackTrace()
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 1005 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            loadCurrentLocation()
         }
-        return url.replace(" ", "%20")
+    }
+
+    private fun urlEncodeChinese(urlString: String): String {
+        return URLEncoder.encode(urlString, "UTF-8")
     }
 
     override fun onStop() {
