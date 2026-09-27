@@ -22,6 +22,7 @@ class MainActivity : BaseActivity<MainViewModel, ActivityMainBinding>() {
     private var currentBackPressedTime = 0L
     private var homeFragment: HomeFragment? = null
     private var friendFragment: FriendFragment? = null
+    private var helpFragment: com.cofbro.qian.help.HelpFragment? = null
     private var profileFragment: ProfileFragment? = null
     private var lastShowFragment: Fragment? = null
     private var contentId = -1
@@ -57,6 +58,16 @@ class MainActivity : BaseActivity<MainViewModel, ActivityMainBinding>() {
                                 .commit()
                         }
                         showFragment(friendFragment!!)
+                    }
+
+                    R.id.tab_help -> {
+                        if (helpFragment == null) {
+                            helpFragment = com.cofbro.qian.help.HelpFragment()
+                            supportFragmentManager.beginTransaction()
+                                .add(contentId, helpFragment!!, "HelpFragment")
+                                .commit()
+                        }
+                        showFragment(helpFragment!!)
                     }
 
                     R.id.tab_profile -> {

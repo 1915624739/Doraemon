@@ -11,7 +11,10 @@
 
     <string name="tab_home">主页</string>
     <string name="tab_friend">好友</string>
+    <string name="tab_help">帮助</string>
     <string name="tab_profile">我的</string>
+    <string name="help_title">使用指南</string>
+    <string name="help_subtitle">行迹使用说明书与功能指引</string>
 
     <string name="pop_add_remark">添加备注</string>
     <string name="pop_delete">删除账号</string>

@@ -12,6 +12,11 @@
         android:title="@string/tab_friend" />
 
     <item
+        android:id="@+id/tab_help"
+        android:icon="@drawable/tab_help"
+        android:title="@string/tab_help" />
+
+    <item
         android:id="@+id/tab_profile"
         android:icon="@drawable/tab_profile"
         android:title="@string/tab_profile" />

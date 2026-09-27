@@ -22,7 +22,7 @@
         android:background="@color/white"
         android:paddingBottom="15dp"
         app:itemRippleColor="@color/appColor"
-        app:labelVisibilityMode="auto"
+        app:labelVisibilityMode="labeled"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

@@ -13,4 +13,5 @@
     <color name="red">#FF0000</color>
     <color name="track_selected_color">#AD3170FF</color>
     <color name="track_unselected_color">#EDEDED</color>
+    <color name="color_808080">#808080</color>
 </resources>
